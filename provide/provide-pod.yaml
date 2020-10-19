@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: providev6 
+  labels:
+    app: eoin
+spec:
+  containers:
+    - name: postgres
+      image: postgres
+      volumeMounts:
+      - name: db-storage
+        mountPath: /var/lib/postgresql/data
+      livenessProbe:
+        exec:
+          command:
+          - pg_isready
+          - -U
+          - prvd
+          - -d
+          - prvd
+        failureThreshold: 2
+        initialDelaySeconds: 10
+        periodSeconds: 60
+        timeoutSeconds: 1
+      env:
+      - name: POSTGRES_DB
+        value: prvd
+      - name: POSTGRES_PASSWORD
+        value: prvdp455
+      - name: POSTGRES_USER
+        value: prvd
+      ports:
+        - containerPort: 5432
+    - name: ident
+      image: provide/ident:development
+      ports: 
+        - containerPort: 8080
+      env:
+      - name: DATABASE_HOST
+        value: postgres
+      - name: DATABASE_NAME
+        value: ident_dev
+      - name: DATABASE_PASSWORD
+        value: ident
+      - name: DATABASE_SUPERUSER
+        value: prvd
+      - name: DATABASE_SUPERUSER_PASSWORD
+        value: prvdp455
+      - name: DATABASE_USER
+        value: ident
+      - name: LOG_LEVEL
+        value: DEBUG
+      - name: NATS_CLIENT_PREFIX
+        value: ident
+      - name: NATS_STREAMING_URL
+        value: nats://nats-streaming:4222
+      - name: NATS_URL
+        value: nats://nats:4222
+      - name: PORT
+        value: "8080"
+      - name: REDIS_HOSTS
+        value: redis:6379
+  volumes:
+    - name: db-storage
+      persistentVolumeClaim:
+        claimName: db-storage
+        

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+    kompose.version: 1.21.0 (992df58d8)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+        kompose.version: 1.21.0 (992df58d8)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/vault: "true"
+        io.kompose.service: postgres
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: prvd
+        - name: POSTGRES_PASSWORD
+          value: prvdp455
+        - name: POSTGRES_USER
+          value: prvd
+        image: postgres
+        imagePullPolicy: ""
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - prvd
+            - -d
+            - prvd
+          failureThreshold: 2
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          timeoutSeconds: 1
+        name: postgres
+        ports:
+        - containerPort: 5432
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: vault-db
+      hostname: postgres
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes:
+      - name: vault-db
+        persistentVolumeClaim:
+          claimName: vault-db
+status: {}

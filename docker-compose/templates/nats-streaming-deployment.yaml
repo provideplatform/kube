@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+    kompose.version: 1.21.0 (992df58d8)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: nats-streaming
+  name: nats-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: nats-streaming
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+        kompose.version: 1.21.0 (992df58d8)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/vault: "true"
+        io.kompose.service: nats-streaming
+    spec:
+      containers:
+      - args:
+        - -cid
+        - provide
+        - --auth
+        - testtoken
+        - -SDV
+        image: provide/nats-streaming
+        imagePullPolicy: ""
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/await_tcp.sh
+            - localhost:4222
+          failureThreshold: 2
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          timeoutSeconds: 1
+        name: nats-streaming
+        resources: {}
+        volumeMounts:
+        - mountPath: /usr/local/bin/await_tcp.sh
+          name: nats-streaming-claim0
+      hostname: nats-streaming
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes:
+      - name: nats-streaming-claim0
+        persistentVolumeClaim:
+          claimName: nats-streaming-claim0
+status: {}
