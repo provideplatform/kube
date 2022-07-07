@@ -1,0 +1,15 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ident
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+spec:
+  tls:
+    - secretName: ingress-tls
+  rules:
+  - http:
+    paths:
+    - backend:
+      serviceName: ident
+      servicePort: 8080

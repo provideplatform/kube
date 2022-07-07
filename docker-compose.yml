@@ -1,48 +1,49 @@
 version: '3.5'
 
 services:
-  postgres:
-    image: postgres
-    container_name: postgres
-    environment:
-      - POSTGRES_DB=prvd
-      - POSTGRES_USER=prvd
-      - POSTGRES_PASSWORD=prvdp455
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "prvd", "-d", "prvd"]
-      interval: 1m
-      timeout: 1s
-      retries: 2
-      start_period: 10s
-    hostname: postgres
-    volumes:
-      - vault-db:/var/lib/postgresql/data
-    networks:
-      - vault
-    ports:
-      - 5432:5432
-    restart: always
 
-  redis:
+  # provide-postgres:
+  #   image: postgres
+  #   container_name: provide-postgres
+  #   environment:
+  #     - POSTGRES_DB=prvd
+  #     - POSTGRES_USER=prvd
+  #     - POSTGRES_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+  #   healthcheck:
+  #     test: ["CMD", "pg_isready", "-U", "prvd", "-d", "prvd"]
+  #     interval: 1m
+  #     timeout: 1s
+  #     retries: 2
+  #     start_period: 10s
+  #   hostname: provide-postgres
+  #   volumes:
+  #     - provide-db:/var/lib/postgresql
+  #   networks:
+  #     - provide
+  #   ports:
+  #     - 5432:5432
+  #   restart: always
+
+  provide-redis:
     image: redis
-    container_name: redis
+    container_name: provide-redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 1m
       timeout: 1s
       retries: 2
       start_period: 10s
-    hostname: redis
+    hostname: provide-redis
     networks:
-      - vault
+      - provide
     ports:
       - 6379:6379
     restart: always
 
-  nats:
-    image: provide/nats-server
+  provide-nats:
+    image: provide/nats-server:2.5.0-PRVD
     container_name: provide-nats
-    command: ["-auth", "testtoken", "-p", "4222", "-D", "-V"]
+    command: ["--js", "--server_name", "prvd-nats1", "-auth", "testtoken", "-p", "4222", "-D", "-V"]
     environment:
       JWT_SIGNER_PUBLIC_KEY: |-
         -----BEGIN PUBLIC KEY-----
@@ -65,135 +66,348 @@ services:
       timeout: 1s
       retries: 2
       start_period: 10s
-    hostname: nats
+    hostname: provide-nats
     networks:
-      - vault
+      - provide
     ports:
       - 4221:4221
       - 4222:4222
     restart: always
-    volumes:
-      - ./ops/await_tcp.sh:/usr/local/bin/await_tcp.sh:cached
 
-  nats-streaming:
-    image: provide/nats-streaming
-    command: ["-cid", "provide", "--auth", "testtoken", "-SDV"]
-    container_name: nats-streaming
+  provide-ident:
+    image: provide/ident
+    container_name: provide-ident
     depends_on:
-      - nats
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/await_tcp.sh", "localhost:4222"]
-      interval: 1m
-      timeout: 1s
-      retries: 2
-      start_period: 10s
-    hostname: nats-streaming
-    networks:
-      - vault
-    restart: always
-    volumes:
-      - ./ops/await_tcp.sh:/usr/local/bin/await_tcp.sh:cached
-
-  ident:
-    image: provide/ident:development
-    container_name: ident
-    depends_on:
-      - nats-streaming
-      - postgres
-      - redis
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
     environment:
-      - DATABASE_HOST=postgres
-      - DATABASE_NAME=ident_dev
-      - DATABASE_USER=ident
+      - API_ACCOUNTING_ADDRESS=telemetry.provide.services:8889
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=ident
+      - DATABASE_USER=ident@apspsg001
       - DATABASE_PASSWORD=ident
-      - DATABASE_SUPERUSER=prvd
-      - DATABASE_SUPERUSER_PASSWORD=prvdp455
-      - NATS_CLIENT_PREFIX=ident
-      - NATS_URL=nats://nats:4222
-      - NATS_STREAMING_URL=nats://nats-streaming:4222
-      - REDIS_HOSTS=redis:6379
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - GIN_MODE=release
+      - IDENT_API_HOST=localhost:8080
+      - IDENT_API_SCHEME=http
+      - NATS_CLIENT_PREFIX=provide-ident
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - REDIS_HOSTS=provide-redis:6379
       - LOG_LEVEL=DEBUG
       - PORT=8080
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ident:8080/status"]
+      test: ["CMD", "curl", "-f", "http://provide-ident:8080/status"]
       interval: 1m
       timeout: 1s
       retries: 2
       start_period: 10s
-    hostname: ident
+    hostname: provide-ident
     networks:
-      - vault
+      - provide
     ports:
-      - 8081:8080
+      - 8080:8080
     restart: always
 
-  ident-consumer:
-    image: provide/ident:development
+  provide-ident-consumer:
+    image: provide/ident
     entrypoint: ./ops/run_consumer.sh
-    container_name: ident-consumer
+    container_name: provide-ident-consumer
     depends_on:
-      - nats-streaming
-      - postgres
-      - redis
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
     environment:
       - CONSUME_NATS_STREAMING_SUBSCRIPTIONS=true
-      - DATABASE_HOST=postgres
-      - DATABASE_NAME=ident_dev
-      - DATABASE_USER=ident
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=ident
+      - DATABASE_USER=ident@apspsg001
       - DATABASE_PASSWORD=ident
-      - DATABASE_SUPERUSER=prvd
-      - DATABASE_SUPERUSER_PASSWORD=prvdp455
-      - NATS_CLIENT_PREFIX=ident-consumer
-      - NATS_URL=nats://nats:4222
-      - NATS_STREAMING_URL=nats://nats-streaming:4222
-      - REDIS_HOSTS=redis:6379
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
       - LOG_LEVEL=DEBUG
-      - PORT=8080
+      - NATS_CLIENT_PREFIX=provide-ident-consumer
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - NCHAIN_API_HOST=provide-nchain:8080
+      - NCHAIN_API_SCHEME=http
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ident:8080/status"]
+      test: ["CMD", "curl", "-f", "http://provide-ident:8080/status"]
       interval: 1m
       timeout: 1s
       retries: 2
       start_period: 10s
-    hostname: ident-consumer
+    hostname: provide-ident-consumer
     networks:
-      - vault
+      - provide
     restart: always
 
-  vault:
-    image: provide/vault:development
-    container_name: vault
+  provide-nchain:
+    image: provide/nchain
+    container_name: provide-nchain
     depends_on:
-      - postgres
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
+      - provide-vault
     environment:
-      - DATABASE_HOST=postgres
-      - DATABASE_NAME=vault_dev
-      - DATABASE_USER=vault
-      - DATABASE_PASSWORD=vault
-      - DATABASE_SUPERUSER=prvd
-      - DATABASE_SUPERUSER_PASSWORD=prvdp455
+      - API_ACCOUNTING_ADDRESS=telemetry.provide.services:8889
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=nchain
+      - DATABASE_USER=nchain@apspsg001
+      - DATABASE_PASSWORD=nchain
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - GIN_MODE=release
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
       - LOG_LEVEL=DEBUG
+      - NATS_CLIENT_PREFIX=provide-nchain
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - PAYMENTS_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImU2OmY3OmQ1OjI0OmUyOjU5OjA2OjJiOmJjOmEyOjhjOjM1OjlkOmNhOjBhOjg3IiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiaWF0IjoxNjAwNzA5Njg3LCJpc3MiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMiLCJqdGkiOiJkMDIzM2JlZC1iMThkLTRmNGEtODNlYS02MjBmYjdjYTY0NWMiLCJuYXRzIjp7InBlcm1pc3Npb25zIjp7InN1YnNjcmliZSI6eyJhbGxvdyI6WyJhcHBsaWNhdGlvbi4wYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJuZXR3b3JrLiouY29ubmVjdG9yLioiLCJuZXR3b3JrLiouc3RhdHVzIiwicGxhdGZvcm0uXHUwMDNlIl19fX0sInBydmQiOnsiYXBwbGljYXRpb25faWQiOiIwYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJleHRlbmRlZCI6eyJwZXJtaXNzaW9ucyI6eyIqIjo1MTB9fSwicGVybWlzc2lvbnMiOjUxMH0sInN1YiI6ImFwcGxpY2F0aW9uOjBjNWE5ZmViLTE2MGMtNGZlMS05MTBlLTE4NzQyZjg2NGJjZSJ9.SUd50x0g6opm2oU9zFMu6rLpc-22WeEi50OByzluBsoV1fCN1INzqHnCJAMLC2myXIDRKaP1Q-MZVAw97hpzuGQjXEY8yobX0Br3DjGADqaM3iJiaD4GB73lZtd2w2jAsy3PDfvEE_dd9SalGA90WLoSUwkEObFxqufj2vnMVuiH1UwUnMawuVGfZPzZ7Wtoe9K4sq0E7qYiND5lgz0tyDnP7FWyd_wHEwjan_AhabgUJA0w5XlUq7AnjHe-NTrCzU_ZTJ6Hdvxy_uNRSOOv4fV4_MVRomqPePBTPXeeLBpjpsVVKSsKGrP3z7oAWclCm21i-9hEvyEeIN3TV71KgYDLaMtHsHZYPdo1WaKdnq49uPVgXbzCsAAWvgjKbOT62VciQVgv1ognm_22gPgxRksrOAhArSUX_LP0NLMxXDGP0TGwx218QgNW4qj6OxQZrBCO5YRl0Lb-mQVZZ2L3AQXk39gvArTnqIQ8aV9hwLeiBqq1qZU7Q77RUHI-yMUfkH3FAy2xQS1AIn7-rM6rCXtjXVUzdjm1_6HrJkDjS20HUFsaqmKacPxlkkCFa08zxsIsuU_h9LY4VdeVHJKnvWUFWy2M6jYvKIJRuF0Dk1PCTLqbiBUmyCnr20qGe5Y8Vc9c3pvuudm6hdk6aGa3zuNOIzftPthPEoUzoG4qZ3c
       - PORT=8080
-      - SEAL_UNSEAL_VALIDATION_HASH=0x7cff64a2d2b709dd9df196000be6237875bafe0a92873fd9fd9f35c00808f309
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://vault:8080/status"]
+      test: ["CMD", "curl", "-f", "http://provide-nchain:8080/status"]
       interval: 1m
       timeout: 1s
       retries: 2
       start_period: 10s
-    hostname: vault
+    hostname: provide-nchain
     networks:
-      - vault
+      - provide
     ports:
-      - 8082:8080
+      - 8080:8080
+    restart: always
+
+  provide-nchain-consumer:
+    image: provide/nchain
+    entrypoint: ./ops/run_consumer.sh
+    container_name: provide-nchain-consumer
+    depends_on:
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
+      - provide-vault
+    environment:
+      - CONSUME_NATS_STREAMING_SUBSCRIPTIONS=true
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=nchain
+      - DATABASE_USER=nchain@apspsg001
+      - DATABASE_PASSWORD=nchain
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
+      - LOG_LEVEL=DEBUG
+      - NATS_CLIENT_PREFIX=provide-nchain-consumer
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - NATS_TOKEN=testtoken
+      - PAYMENTS_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImU2OmY3OmQ1OjI0OmUyOjU5OjA2OjJiOmJjOmEyOjhjOjM1OjlkOmNhOjBhOjg3IiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiaWF0IjoxNjAwNzA5Njg3LCJpc3MiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMiLCJqdGkiOiJkMDIzM2JlZC1iMThkLTRmNGEtODNlYS02MjBmYjdjYTY0NWMiLCJuYXRzIjp7InBlcm1pc3Npb25zIjp7InN1YnNjcmliZSI6eyJhbGxvdyI6WyJhcHBsaWNhdGlvbi4wYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJuZXR3b3JrLiouY29ubmVjdG9yLioiLCJuZXR3b3JrLiouc3RhdHVzIiwicGxhdGZvcm0uXHUwMDNlIl19fX0sInBydmQiOnsiYXBwbGljYXRpb25faWQiOiIwYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJleHRlbmRlZCI6eyJwZXJtaXNzaW9ucyI6eyIqIjo1MTB9fSwicGVybWlzc2lvbnMiOjUxMH0sInN1YiI6ImFwcGxpY2F0aW9uOjBjNWE5ZmViLTE2MGMtNGZlMS05MTBlLTE4NzQyZjg2NGJjZSJ9.SUd50x0g6opm2oU9zFMu6rLpc-22WeEi50OByzluBsoV1fCN1INzqHnCJAMLC2myXIDRKaP1Q-MZVAw97hpzuGQjXEY8yobX0Br3DjGADqaM3iJiaD4GB73lZtd2w2jAsy3PDfvEE_dd9SalGA90WLoSUwkEObFxqufj2vnMVuiH1UwUnMawuVGfZPzZ7Wtoe9K4sq0E7qYiND5lgz0tyDnP7FWyd_wHEwjan_AhabgUJA0w5XlUq7AnjHe-NTrCzU_ZTJ6Hdvxy_uNRSOOv4fV4_MVRomqPePBTPXeeLBpjpsVVKSsKGrP3z7oAWclCm21i-9hEvyEeIN3TV71KgYDLaMtHsHZYPdo1WaKdnq49uPVgXbzCsAAWvgjKbOT62VciQVgv1ognm_22gPgxRksrOAhArSUX_LP0NLMxXDGP0TGwx218QgNW4qj6OxQZrBCO5YRl0Lb-mQVZZ2L3AQXk39gvArTnqIQ8aV9hwLeiBqq1qZU7Q77RUHI-yMUfkH3FAy2xQS1AIn7-rM6rCXtjXVUzdjm1_6HrJkDjS20HUFsaqmKacPxlkkCFa08zxsIsuU_h9LY4VdeVHJKnvWUFWy2M6jYvKIJRuF0Dk1PCTLqbiBUmyCnr20qGe5Y8Vc9c3pvuudm6hdk6aGa3zuNOIzftPthPEoUzoG4qZ3c
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://provide-nchain:8080/status"]
+      interval: 1m
+      timeout: 1s
+      retries: 2
+      start_period: 10s
+    hostname: provide-nchain-consumer
+    networks:
+      - provide
+    restart: always
+
+  provide-statsdaemon:
+    image: provide/nchain
+    entrypoint: ./ops/run_statsdaemon.sh
+    container_name: provide-statsdaemon
+    depends_on:
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
+    environment:
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=nchain
+      - DATABASE_USER=nchain@apspsg001
+      - DATABASE_PASSWORD=nchain
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
+      - LOG_LEVEL=DEBUG
+      - NATS_CLIENT_PREFIX=statsdaemon
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - PAYMENTS_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImU2OmY3OmQ1OjI0OmUyOjU5OjA2OjJiOmJjOmEyOjhjOjM1OjlkOmNhOjBhOjg3IiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiaWF0IjoxNjAwNzA5Njg3LCJpc3MiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMiLCJqdGkiOiJkMDIzM2JlZC1iMThkLTRmNGEtODNlYS02MjBmYjdjYTY0NWMiLCJuYXRzIjp7InBlcm1pc3Npb25zIjp7InN1YnNjcmliZSI6eyJhbGxvdyI6WyJhcHBsaWNhdGlvbi4wYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJuZXR3b3JrLiouY29ubmVjdG9yLioiLCJuZXR3b3JrLiouc3RhdHVzIiwicGxhdGZvcm0uXHUwMDNlIl19fX0sInBydmQiOnsiYXBwbGljYXRpb25faWQiOiIwYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJleHRlbmRlZCI6eyJwZXJtaXNzaW9ucyI6eyIqIjo1MTB9fSwicGVybWlzc2lvbnMiOjUxMH0sInN1YiI6ImFwcGxpY2F0aW9uOjBjNWE5ZmViLTE2MGMtNGZlMS05MTBlLTE4NzQyZjg2NGJjZSJ9.SUd50x0g6opm2oU9zFMu6rLpc-22WeEi50OByzluBsoV1fCN1INzqHnCJAMLC2myXIDRKaP1Q-MZVAw97hpzuGQjXEY8yobX0Br3DjGADqaM3iJiaD4GB73lZtd2w2jAsy3PDfvEE_dd9SalGA90WLoSUwkEObFxqufj2vnMVuiH1UwUnMawuVGfZPzZ7Wtoe9K4sq0E7qYiND5lgz0tyDnP7FWyd_wHEwjan_AhabgUJA0w5XlUq7AnjHe-NTrCzU_ZTJ6Hdvxy_uNRSOOv4fV4_MVRomqPePBTPXeeLBpjpsVVKSsKGrP3z7oAWclCm21i-9hEvyEeIN3TV71KgYDLaMtHsHZYPdo1WaKdnq49uPVgXbzCsAAWvgjKbOT62VciQVgv1ognm_22gPgxRksrOAhArSUX_LP0NLMxXDGP0TGwx218QgNW4qj6OxQZrBCO5YRl0Lb-mQVZZ2L3AQXk39gvArTnqIQ8aV9hwLeiBqq1qZU7Q77RUHI-yMUfkH3FAy2xQS1AIn7-rM6rCXtjXVUzdjm1_6HrJkDjS20HUFsaqmKacPxlkkCFa08zxsIsuU_h9LY4VdeVHJKnvWUFWy2M6jYvKIJRuF0Dk1PCTLqbiBUmyCnr20qGe5Y8Vc9c3pvuudm6hdk6aGa3zuNOIzftPthPEoUzoG4qZ3c
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://provide-nchain:8080/status"]
+      interval: 1m
+      timeout: 1s
+      retries: 2
+      start_period: 10s
+    hostname: provide-statsdaemon
+    networks:
+      - provide
+    restart: always
+
+  provide-privacy:
+    image: provide/privacy
+    container_name: provide-privacy
+    depends_on:
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-privacy-consumer
+      - provide-redis
+      - provide-vault
+    environment:
+      - API_ACCOUNTING_ADDRESS=telemetry.provide.services:8889
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=privacy
+      - DATABASE_USER=privacy@apspsg001
+      - DATABASE_PASSWORD=privacy
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - GIN_MODE=release
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
+      - LOG_LEVEL=DEBUG
+      - NATS_CLIENT_PREFIX=provide-privacy
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - PAYMENTS_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImU2OmY3OmQ1OjI0OmUyOjU5OjA2OjJiOmJjOmEyOjhjOjM1OjlkOmNhOjBhOjg3IiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiaWF0IjoxNjAwNzA5Njg3LCJpc3MiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMiLCJqdGkiOiJkMDIzM2JlZC1iMThkLTRmNGEtODNlYS02MjBmYjdjYTY0NWMiLCJuYXRzIjp7InBlcm1pc3Npb25zIjp7InN1YnNjcmliZSI6eyJhbGxvdyI6WyJhcHBsaWNhdGlvbi4wYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJuZXR3b3JrLiouY29ubmVjdG9yLioiLCJuZXR3b3JrLiouc3RhdHVzIiwicGxhdGZvcm0uXHUwMDNlIl19fX0sInBydmQiOnsiYXBwbGljYXRpb25faWQiOiIwYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJleHRlbmRlZCI6eyJwZXJtaXNzaW9ucyI6eyIqIjo1MTB9fSwicGVybWlzc2lvbnMiOjUxMH0sInN1YiI6ImFwcGxpY2F0aW9uOjBjNWE5ZmViLTE2MGMtNGZlMS05MTBlLTE4NzQyZjg2NGJjZSJ9.SUd50x0g6opm2oU9zFMu6rLpc-22WeEi50OByzluBsoV1fCN1INzqHnCJAMLC2myXIDRKaP1Q-MZVAw97hpzuGQjXEY8yobX0Br3DjGADqaM3iJiaD4GB73lZtd2w2jAsy3PDfvEE_dd9SalGA90WLoSUwkEObFxqufj2vnMVuiH1UwUnMawuVGfZPzZ7Wtoe9K4sq0E7qYiND5lgz0tyDnP7FWyd_wHEwjan_AhabgUJA0w5XlUq7AnjHe-NTrCzU_ZTJ6Hdvxy_uNRSOOv4fV4_MVRomqPePBTPXeeLBpjpsVVKSsKGrP3z7oAWclCm21i-9hEvyEeIN3TV71KgYDLaMtHsHZYPdo1WaKdnq49uPVgXbzCsAAWvgjKbOT62VciQVgv1ognm_22gPgxRksrOAhArSUX_LP0NLMxXDGP0TGwx218QgNW4qj6OxQZrBCO5YRl0Lb-mQVZZ2L3AQXk39gvArTnqIQ8aV9hwLeiBqq1qZU7Q77RUHI-yMUfkH3FAy2xQS1AIn7-rM6rCXtjXVUzdjm1_6HrJkDjS20HUFsaqmKacPxlkkCFa08zxsIsuU_h9LY4VdeVHJKnvWUFWy2M6jYvKIJRuF0Dk1PCTLqbiBUmyCnr20qGe5Y8Vc9c3pvuudm6hdk6aGa3zuNOIzftPthPEoUzoG4qZ3c
+      - PORT=8080
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://provide-privacy:8080/status"]
+      interval: 1m
+      timeout: 1s
+      retries: 2
+      start_period: 10s
+    hostname: provide-privacy
+    networks:
+      - provide
+    ports:
+      - 8080:8080
+    restart: always
+
+  provide-privacy-consumer:
+    image: provide/privacy
+    container_name: provide-privacy-consumer
+    depends_on:
+      - provide-ident
+      - provide-nats
+      # - provide-postgres
+      - provide-redis
+      - provide-vault
+    environment:
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=privacy
+      - DATABASE_USER=privacy@apspsg001
+      - DATABASE_PASSWORD=privacy
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
+      - LOG_LEVEL=DEBUG
+      - NATS_CLIENT_PREFIX=provide-privacy
+      - NATS_URL=nats://provide-nats:4222
+      - NATS_STREAMING_URL=nats://provide-nats:4222
+      - PAYMENTS_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImU2OmY3OmQ1OjI0OmUyOjU5OjA2OjJiOmJjOmEyOjhjOjM1OjlkOmNhOjBhOjg3IiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiaWF0IjoxNjAwNzA5Njg3LCJpc3MiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMiLCJqdGkiOiJkMDIzM2JlZC1iMThkLTRmNGEtODNlYS02MjBmYjdjYTY0NWMiLCJuYXRzIjp7InBlcm1pc3Npb25zIjp7InN1YnNjcmliZSI6eyJhbGxvdyI6WyJhcHBsaWNhdGlvbi4wYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJuZXR3b3JrLiouY29ubmVjdG9yLioiLCJuZXR3b3JrLiouc3RhdHVzIiwicGxhdGZvcm0uXHUwMDNlIl19fX0sInBydmQiOnsiYXBwbGljYXRpb25faWQiOiIwYzVhOWZlYi0xNjBjLTRmZTEtOTEwZS0xODc0MmY4NjRiY2UiLCJleHRlbmRlZCI6eyJwZXJtaXNzaW9ucyI6eyIqIjo1MTB9fSwicGVybWlzc2lvbnMiOjUxMH0sInN1YiI6ImFwcGxpY2F0aW9uOjBjNWE5ZmViLTE2MGMtNGZlMS05MTBlLTE4NzQyZjg2NGJjZSJ9.SUd50x0g6opm2oU9zFMu6rLpc-22WeEi50OByzluBsoV1fCN1INzqHnCJAMLC2myXIDRKaP1Q-MZVAw97hpzuGQjXEY8yobX0Br3DjGADqaM3iJiaD4GB73lZtd2w2jAsy3PDfvEE_dd9SalGA90WLoSUwkEObFxqufj2vnMVuiH1UwUnMawuVGfZPzZ7Wtoe9K4sq0E7qYiND5lgz0tyDnP7FWyd_wHEwjan_AhabgUJA0w5XlUq7AnjHe-NTrCzU_ZTJ6Hdvxy_uNRSOOv4fV4_MVRomqPePBTPXeeLBpjpsVVKSsKGrP3z7oAWclCm21i-9hEvyEeIN3TV71KgYDLaMtHsHZYPdo1WaKdnq49uPVgXbzCsAAWvgjKbOT62VciQVgv1ognm_22gPgxRksrOAhArSUX_LP0NLMxXDGP0TGwx218QgNW4qj6OxQZrBCO5YRl0Lb-mQVZZ2L3AQXk39gvArTnqIQ8aV9hwLeiBqq1qZU7Q77RUHI-yMUfkH3FAy2xQS1AIn7-rM6rCXtjXVUzdjm1_6HrJkDjS20HUFsaqmKacPxlkkCFa08zxsIsuU_h9LY4VdeVHJKnvWUFWy2M6jYvKIJRuF0Dk1PCTLqbiBUmyCnr20qGe5Y8Vc9c3pvuudm6hdk6aGa3zuNOIzftPthPEoUzoG4qZ3c
+      - REDIS_HOSTS=provide-redis:6379
+      - VAULT_API_HOST=provide-vault:8080
+      - VAULT_API_SCHEME=http
+      - VAULT_REFRESH_TOKEN=eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjQwMjc1Nzk3LCJpYXQiOjE2Mzc2ODM3OTcsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjVjYzA3MjYzLTE4MWYtNGEwNC05MGYwLWM2MTVkNGIxOGYzNSIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZS5cdTAwM2UiLCIkU1lTLlJFUS5cdTAwM2UiXX0sInN1YnNjcmliZSI6eyJhbGxvdyI6WyJ1c2VyLjQwYmM3MGJmLTExNDAtNDk3OC05OWJjLWI4YjgwMDY3Mjg0MiIsIm9yZ2FuaXphdGlvbi5mZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCIkU1lTLlx1MDAzZSIsImJhc2VsaW5lLlx1MDAzZSIsIm5ldHdvcmsuKi5jb25uZWN0b3IuKiIsIm5ldHdvcmsuKi5jb250cmFjdHMuKiIsIm5ldHdvcmsuKi5zdGF0dXMiLCJwbGF0Zm9ybS5cdTAwM2UiXX19fSwicHJ2ZCI6eyJvcmdhbml6YXRpb25faWQiOiJmZjIyMTM5MC02YjcwLTRjOGQtOGE0NC1hNjMxNWIwYmE4YzYiLCJwZXJtaXNzaW9ucyI6NTM2ODc4NDY1LCJ1c2VyX2lkIjoiNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIn0sInN1YiI6InRva2VuOjBjOWZkODU1LTc2MjctNGU3NS04OTgxLWY3OTY0MGE3YmI2ZCJ9.er2Ab2O2Q3M2d8_WTTQt42-ttueZ67qZb_CthWH36LeNHy2wBsF35-05HXp3PyvOaO8FRazbGH7n6eFBnvGJplAaX1vPoZ1ZAeM5O4e298eKadvH4vOPn1o7Kvm0x3iY4OGBsDbGMRXe2EwXZTCKsR0xh1cqN3GqYblOgLA-31slrSaimH9SZL8BXult1NsrHNHpJLtoNsUtdxXlKzNv7RmVAPDiIuNwHHAx6_DHa19rRikzI7Yvh9FgXzxX_U8VKiKl9lpQXrN50otUryzUuYW4dTsy8AaOT_U4BtE50e2lIdN9c3gMBJsRpa7DMM9MHk6eA_AlcfZBxbWZZY5B6UUdUDn_fI6ry5911ff84tgtwiT92Isvv0pzpxVtYFNrbKRfR5L2-Y6nsp-e3YE75Ty930yb0sVZT0XGKaFdylP-wGHPRMyysNek9yZq1yHxhuzEdVhZbg6T6EADbqH56JkCxX2e7kc8c-LemccIEFN44fr66MILQ4s_s8GYpQXE5BtVYBb0xHswKUEve30SDfxqTMsqBQ2-nz-LvSXHMkRGbM2S9_dOzO5isiGZrtSQewReI4LfrheycFFw1yUJ2QwfSRxgmnE_LS3N_7i5CD69bP0JAvHxjXVmtS_dnYOTGc6zG45YA6jVU1nbtkBy4Ynd_s0cLEd-wmiHHrlYiSw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://provide-privacy:8080/status"]
+      interval: 1m
+      timeout: 1s
+      retries: 2
+      start_period: 10s
+    hostname: provide-privacy
+    networks:
+      - provide
+    restart: always
+
+  provide-vault:
+    image: provide/vault
+    container_name: provide-vault
+    depends_on:
+      - provide-ident
+      # - provide-postgres
+      - provide-redis
+    environment:
+      - API_ACCOUNTING_ADDRESS=telemetry.provide.services:8889
+      - DATABASE_HOST=apspsg001.postgres.database.azure.com
+      - DATABASE_NAME=vault
+      - DATABASE_USER=vault@apspsg001
+      - DATABASE_PASSWORD=vault
+      - DATABASE_SUPERUSER=prvd@apspsg001
+      - DATABASE_SUPERUSER_PASSWORD=wBLzqU0tT4G9N6ZbrvHE#p0L$$sS9iqaxxgY$$5No615iS3Rbood
+      - DATABASE_SSL_MODE=require
+      - GIN_MODE=release
+      - IDENT_API_HOST=provide-ident:8080
+      - IDENT_API_SCHEME=http
+      - LOG_LEVEL=DEBUG
+      - PORT=8080
+      - REDIS_HOSTS=provide-redis:6379
+      - SEAL_UNSEAL_KEY=corn domain lonely owner media grape hard rough arena knock uncover goddess cinnamon wing actress spring dizzy skill alter pistol funny bind rapid soap
+      - SEAL_UNSEAL_VALIDATION_HASH=0x05598175ac56c919ca39be16fdbb4335f755e53c27aca03717dc1b89e206aad1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://provide-vault:8080/status"]
+      interval: 1m
+      timeout: 1s
+      retries: 2
+      start_period: 10s
+    hostname: provide-vault
+    networks:
+      - provide
+    ports:
+      - 8080:8080
     restart: always
 
 networks:
-  vault:
+  provide:
     driver: bridge
     ipam:
       config:
       - subnet: 172.40.0.0/24
 
 volumes:
-  vault-db:
+  provide-db:
