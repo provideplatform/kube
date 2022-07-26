@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+    kompose.version: 1.21.0 (992df58d8)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: nats
+  name: nats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: nats
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+        kompose.version: 1.21.0 (992df58d8)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/vault: "true"
+        io.kompose.service: nats
+    spec:
+      containers:
+      - args:
+        - --js
+        - --server_name
+        - prvd
+        - --auth
+        - testtoken
+        - --config
+        - /etc/nats-server.conf
+        - --port
+        - "4222"
+        - -DVV
+        volumeMounts:
+          - mountPath: /etc/nats-server.conf
+            name: config-volume
+            subPath: nats-server.conf
+        env:
+        - name: JWT_SIGNER_PUBLIC_KEY
+          value: |-
+            -----BEGIN PUBLIC KEY-----
+            MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAullT/WoZnxecxKwQFlwE
+            9lpQrekSD+txCgtb9T3JvvX/YkZTYkerf0rssQtrwkBlDQtm2cB5mHlRt4lRDKQy
+            EA2qNJGM1Yu379abVObQ9ZXI2q7jTBZzL/Yl9AgUKlDIAXYFVfJ8XWVTi0l32Vsx
+            tJSd97hiRXO+RqQu5UEr3jJ5tL73iNLp5BitRBwa4KbDCbicWKfSH5hK5DM75EyM
+            R/SzR3oCLPFNLs+fyc7zH98S1atglbelkZsMk/mSIKJJl1fZFVCUxA+8CaPiKbpD
+            QLpzydqyrk/y275aSU/tFHidoewvtWorNyFWRnefoWOsJFlfq1crgMu2YHTMBVtU
+            SJ+4MS5D9fuk0queOqsVUgT7BVRSFHgDH7IpBZ8s9WRrpE6XOE+feTUyyWMjkVgn
+            gLm5RSbHpB8Wt/Wssy3VMPV3T5uojPvX+ITmf1utz0y41gU+iZ/YFKeNN8WysLxX
+            AP3Bbgo+zNLfpcrH1Y27WGBWPtHtzqiafhdfX6LQ3/zXXlNuruagjUohXaMltH+S
+            K8zK4j7n+BYl+7y1dzOQw4CadsDi5whgNcg2QUxuTlW+TQ5VBvdUl9wpTSygD88H
+            xH2b0OBcVjYsgRnQ9OZpQ+kIPaFhaWChnfEArCmhrOEgOnhfkr6YGDHFenfT3/RA
+            PUl1cxrvY7BHh4obNa6Bf8ECAwEAAQ==
+            -----END PUBLIC KEY-----
+        - name: DATABASE_HOST
+          value: baseline-local-postgres
+        - name: DATABASE_PORT
+          value: "5432"
+        - name: DATABASE_USER
+          value: baseline
+        - name: DATABASE_PASSWORD
+          value: prvdp455
+        - name: DATABASE_NAME
+          value: baseline
+        - name: DATABASE_SUPERUSER
+          value: prvd
+        - name: DATABASE_SUPERUSER_PASSWORD
+          value: prvdp455
+        - name: DATABASE_LOGGING
+          value: "false"
+        - name: IDENT_API_HOST
+          value: baseline-api
+        - name: IDENT_API_SCHEME
+          value: https
+        - name: JWT_SIGNER_PUBLIC_KEY
+          value: -----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuNPVaemP7KOzFilD/tuD\nLckNxzwM/d7chlea5mHqXlhZsILg4XNSfFc5eIynanVljQcPXpUxfNOZfvAwpA+G\niznuHZ9MtJ6WYecD5BExBtbbAlGcEiFGLCl+Lg0ULhXifstRTapQ4YcS4aEvmvfZ\nY5pRhqlsz7JsNsl1OTDNOIPKVGStYQcMeCOzttXaTC3ZMFPNUQGvqhuj1wsqgA0I\nWq8ENZi7YL/0RETJXiBlwupV6+JaDHm58DUd0CMTUS5HDVBAiexYTRDV8KfcZrKD\n8ceEgypPjTqCdIQDh8UzwL8iFaN0px0qKG6nt/bYI0he7IbS2Z8YLmH8p5BOf2UE\ncx7AF9bLsXGsNzOEAHsdc78q4YMOyy97XLEtXQBm9CJGBTaVrQNBa56eTJI8GD6Z\n2rb1YnUbCoemIB6YxZV1Fl0EUFOzqiYGcfanukfcyaOjYx8/6OOTPrZn1sP0LxAg\nfs8GOX7ZHQQnsIKcsQNLDuKIG8keBXhS1XKU8TssQ1bP8h9hJofFnoao5+g15uFJ\nwV4kLaXCCO8IVzUSciiYz8m4xyTaO1xsps9r/8uQXGcpszQaAnzzz+oWO3drFzDN\nYaLUnXlBqOnWaPA/E11u0HDZj4Cx4kfO+vrEmXj4fdgIyptzw5KAuuBgbCVQiQhd\n1h8otG6VoZsTaToP1Lr8FL8CAwEAAQ==\n-----END PUBLIC KEY-----\n
+        - name: LOG_LEVEL
+          value: DEBUG
+        - name: NATS_CLIENT_PREFIX
+          value: baseline-local
+        - name: NATS_JETSTREAM_URL
+          value: nats://nats:4222
+        - name: NATS_TOKEN
+          value: testtoken
+        - name: NATS_URL
+          value: nats://nats:4222
+        - name: NCHAIN_API_HOST
+          value: nchain
+        - name: NCHAIN_API_SCHEME
+          value: https
+        - name: NCHAIN_BASELINE_NETWORK_ID
+          value: 8d31bf48-df6b-4a71-9d7c-3cb291111e27
+        - name: PRIVACY_API_HOST
+          value: privacy
+        - name: PRIVACY_API_SCHEME
+          value: https
+        - name: PRIVACY_API_SCHEME
+          value: https
+        - name: REDIS_HOSTS
+          value: redis:6379
+        - name: SYSLOG_ENDPOINT
+          value: ""
+        - name: VAULT_API_HOST
+          value: vault
+        - name: VAULT_API_SCHEME
+          value: https
+        - name: VAULT_REFRESH_TOKEN
+          value: eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjU3MDc1MzQ1LCJpYXQiOjE2NTQ0ODMzNDUsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6IjM5MjZhNTliLWUxNjQtNGIyYi1hYzlmLTVmMzQ1ZWRlOGEzMCIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZSIsImJhc2VsaW5lLlx1MDAzZSJdfSwic3Vic2NyaWJlIjp7ImFsbG93IjpbInVzZXIuNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIiwib3JnYW5pemF0aW9uLjJiMmQzYjRjLTA0NTktNGI5Yi05M2M3LTFlMTI4YjJiN2I2NiIsImJhc2VsaW5lIiwiYmFzZWxpbmUuXHUwMDNlIiwibmV0d29yay4qLmNvbm5lY3Rvci4qIiwibmV0d29yay4qLmNvbnRyYWN0cy4qIiwibmV0d29yay4qLnN0YXR1cyIsInBsYXRmb3JtLlx1MDAzZSJdfX19LCJwcnZkIjp7Im9yZ2FuaXphdGlvbl9pZCI6IjJiMmQzYjRjLTA0NTktNGI5Yi05M2M3LTFlMTI4YjJiN2I2NiIsInBlcm1pc3Npb25zIjo1MTAsInVzZXJfaWQiOiI0MGJjNzBiZi0xMTQwLTQ5NzgtOTliYy1iOGI4MDA2NzI4NDIifSwic3ViIjoidG9rZW46MzY4YTZmZWEtZWY1Ni00MjkyLWFiMzEtNTRhYjFhZjk1MzM4In0.UIoiy7hPzXTi4x2UsblwSj4FTJ8_49VXEdmvBsZB4xA_wInQWM960tYfp1a7qLd_L8JV4e9ubcEtmgBqNxZv3wPOMGxXKL8SEzr66r-w33Q9E2YIAgd0CIVyFTxVKoNOkQT5-Vhq9L21nbhm45VMfErR7HFoBXHabq60GiJL-W99ikJpjZ5VaqfcqOBXtn3NbGqJbZcNew-Sr-dBFK9b5bDFuomnDsEYGi9lNXXSMXGrQPOzFKgjGG2hfRmSrifwul1jAkNSnHCngHloFx3aQYNjduSFRwMfOHe1XuvDoIPL5ExACOng_4gyejhmC7xuHCMMKwWlsBKU03XBfTNU4IQ7jqvAWJQAwyad6Akj3NtEZ71g6Mc9tLH5dnPDv0WZZVGzl9H3XrLcmhoSRcDVWOXFBdMKL-scvqx-Sf3-QmWFdT-1VqP85pxRpEC1bwJsBdCtgUhIXa9TayX5XeqaK_B3K0FlmTClZ_u7wBXA_EubsRAdwipHG2RnDQoq-2wO8MsPhptfcisKxPOeDozxj9y_LwpDf185cJOBEH0Yy-9HTucCDZ5aId61qbVXyHXZJ4MLnVEQ89aMa0P1PlTOG_HZ07sB4A9sshHMMl9u6fcLUvudtWAOkd6lZse581BXv2odBt6E3HaUNBKfE_CfVX9OJnsvPr1DV48WxQYLA68
+        - name: VAULT_SEAL_UNSEAL_KEY
+          value: ""
+        image: provide/nats-server:2.7.2-PRVD
+        imagePullPolicy: ""
+        livenessProbe:
+          exec:
+            command:
+            - nc
+            - -zv
+            - localhost
+            - "4222"
+          failureThreshold: 2
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          timeoutSeconds: 1
+        name: provide-nats
+        ports:
+        - containerPort: 4221
+        - containerPort: 4222
+        resources: {}
+      hostname: nats
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nats-config
+status: {}

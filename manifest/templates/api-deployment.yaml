@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+    kompose.version: 1.21.0 (992df58d8)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: baseline-api
+  name: baseline-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: baseline-api
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert --chart --controller=deployment -f docker-compose.yml
+        kompose.version: 1.21.0 (992df58d8)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/vault: "true"
+        io.kompose.service: baseline-api
+    spec:
+      containers:
+        - env:
+            - name: DATABASE_HOST
+              value: postgres
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_USER
+              value: baseline
+            - name: DATABASE_PASSWORD
+              value: prvdp455
+            - name: DATABASE_NAME
+              value: baseline
+            - name: DATABASE_SUPERUSER
+              value: prvd
+            - name: DATABASE_SUPERUSER_PASSWORD
+              value: prvdp455
+            - name: DATABASE_LOGGING
+              value: "false"
+            - name: IDENT_API_HOST
+              value: ident.provide.services
+            - name: IDENT_API_SCHEME
+              value: https
+            - name: JWT_SIGNER_PUBLIC_KEY
+              value: -----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAuNPVaemP7KOzFilD/tuD\nLckNxzwM/d7chlea5mHqXlhZsILg4XNSfFc5eIynanVljQcPXpUxfNOZfvAwpA+G\niznuHZ9MtJ6WYecD5BExBtbbAlGcEiFGLCl+Lg0ULhXifstRTapQ4YcS4aEvmvfZ\nY5pRhqlsz7JsNsl1OTDNOIPKVGStYQcMeCOzttXaTC3ZMFPNUQGvqhuj1wsqgA0I\nWq8ENZi7YL/0RETJXiBlwupV6+JaDHm58DUd0CMTUS5HDVBAiexYTRDV8KfcZrKD\n8ceEgypPjTqCdIQDh8UzwL8iFaN0px0qKG6nt/bYI0he7IbS2Z8YLmH8p5BOf2UE\ncx7AF9bLsXGsNzOEAHsdc78q4YMOyy97XLEtXQBm9CJGBTaVrQNBa56eTJI8GD6Z\n2rb1YnUbCoemIB6YxZV1Fl0EUFOzqiYGcfanukfcyaOjYx8/6OOTPrZn1sP0LxAg\nfs8GOX7ZHQQnsIKcsQNLDuKIG8keBXhS1XKU8TssQ1bP8h9hJofFnoao5+g15uFJ\nwV4kLaXCCO8IVzUSciiYz8m4xyTaO1xsps9r/8uQXGcpszQaAnzzz+oWO3drFzDN\nYaLUnXlBqOnWaPA/E11u0HDZj4Cx4kfO+vrEmXj4fdgIyptzw5KAuuBgbCVQiQhd\n1h8otG6VoZsTaToP1Lr8FL8CAwEAAQ==\n-----END PUBLIC KEY-----\n
+            - name: LOG_LEVEL
+              value: DEBUG
+            - name: NATS_CLIENT_PREFIX
+              value: baseline-local
+            - name: NATS_JETSTREAM_URL
+              value: nats://nats:4222
+            - name: NATS_TOKEN
+              value: testtoken
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: NCHAIN_API_HOST
+              value: nchain.provide.services
+            - name: NCHAIN_API_SCHEME
+              value: https
+            - name: NCHAIN_BASELINE_NETWORK_ID
+              value: 8d31bf48-df6b-4a71-9d7c-3cb291111e27
+            - name: PRIVACY_API_HOST
+              value: privacy.provide.services
+            - name: PRIVACY_API_SCHEME
+              value: https
+            - name: REDIS_HOSTS
+              value: redis:6379
+            - name: SYSLOG_ENDPOINT
+              value: ""
+            - name: VAULT_API_HOST
+              value: vault:8080
+            - name: VAULT_API_SCHEME
+              value: http
+            - name: VAULT_REFRESH_TOKEN
+              value: eyJhbGciOiJSUzI1NiIsImtpZCI6ImM1OmViOjhkOjU5OjQ0OjM4OjYzOjA2OmM5OmQzOmU0Ojk3OjA4OmZiOjY4OjljIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50LnByb3ZpZGUuc2VydmljZXMvYXBpL3YxIiwiZXhwIjoxNjYxNDA1NjA1LCJpYXQiOjE2NTg4MTM2MDUsImlzcyI6Imh0dHBzOi8vaWRlbnQucHJvdmlkZS5zZXJ2aWNlcyIsImp0aSI6Ijc1MGM2NWYwLWUyNzgtNDk2Yi05ZmIyLWMzNWU3MjNjZWZmNiIsIm5hdHMiOnsicGVybWlzc2lvbnMiOnsicHVibGlzaCI6eyJhbGxvdyI6WyJiYXNlbGluZSIsImJhc2VsaW5lLlx1MDAzZSJdfSwic3Vic2NyaWJlIjp7ImFsbG93IjpbInVzZXIuNDBiYzcwYmYtMTE0MC00OTc4LTk5YmMtYjhiODAwNjcyODQyIiwib3JnYW5pemF0aW9uLjYxYzFhZDMzLTNlNDMtNDFlMi04MjZlLTEzNzY4M2I2ZTgxZSIsImJhc2VsaW5lIiwiYmFzZWxpbmUuXHUwMDNlIiwibmV0d29yay4qLmNvbm5lY3Rvci4qIiwibmV0d29yay4qLmNvbnRyYWN0cy4qIiwibmV0d29yay4qLnN0YXR1cyIsInBsYXRmb3JtLlx1MDAzZSJdfX19LCJwcnZkIjp7Im9yZ2FuaXphdGlvbl9pZCI6IjYxYzFhZDMzLTNlNDMtNDFlMi04MjZlLTEzNzY4M2I2ZTgxZSIsInBlcm1pc3Npb25zIjo1MTAsInVzZXJfaWQiOiI0MGJjNzBiZi0xMTQwLTQ5NzgtOTliYy1iOGI4MDA2NzI4NDIifSwic3ViIjoidG9rZW46ZjZmMjdhNzgtODUyNC00YWZiLTk0NjUtZDZhZDRkYTNhZjY1In0.YoIwHTjy7sQwtVpwOX8odCH2Y6CZLlEAdTh5IPD9PEHUq7UfPnhqNm8Mp7RBYRbGBR3jMPZRdihbXM9uTEBE53dJQZeLzpoyfFuvG3Ujdc2_XauQZignyfEH-_Y9tLybwzOrTFcSGIQnx7oyE8T24wuzyGf2YA5UHx4U1fq45SmCHjGdzr04mFbrtOUNlSNC_w3GM85FcQ5ndx3pHcColFdszEPnr9C49Q_GavjLgf23uAY4JuI31RYc4vzxmib6n6IGLUCUFHeBz4bovnQcuY_0FGI4q1qJ-PLUgtAViN-bbdru3eJbGhgg7KGDP4Y8Yu4L5wA2tsGzYV3AD7kLVj7gS3F6Nfv8dFCIu7SM4565nDaAEe_Ot9MnK8LWjzZRtzx2F4uIKZgxC22Kgldhbaln2KE-QdeBMQxyt4eIxaQ-0zonxpyccUuDWF8JrAhMeq-7p4qMMFqnTzvyWHfI7y6owMNBOgEignRlI_9tG19p4SB-qEzAtQy4nNHgwTO4wQ5F6L1Iqf0HOWCKHDtBjed0SddkfpS9a7ZF8k2ax6TOie62Z6ZlQFd7c15x102oFFQkoO-sseHEy66DxLwhsF1Hkf8lQQaxZ3l_kJCDxWDKE_qNVoE1pB12nsTV-k5WSE3OGSSlsDrreWc2rPLLjh9065ZP8bNL7mqt_XzSzks
+            - name: PORT
+              value: "8080"
+            - name: PATH
+              value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bi
+          image: provide/baseline
+          imagePullPolicy: ""
+          livenessProbe:
+            exec:
+              command:
+                - curl
+                - -f
+                - http://baseline-api:8080/status
+            failureThreshold: 2
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            timeoutSeconds: 1
+          name: baseline-api
+          ports:
+            - containerPort: 8080
+          resources: {}
+      hostname: baseline-api
+      restartPolicy: Always
+      serviceAccountName: ""
+      volumes: null
+status: {}
