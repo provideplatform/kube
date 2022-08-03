@@ -1,0 +1,12 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nats-config
+data:
+  nats-server.conf: |
+    max_payload: 100Mb
+    max_pending: 104857600
+    websocket {
+      listen: "0.0.0.0:4221"
+      no_tls: true
+    }
